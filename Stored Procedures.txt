@@ -1,0 +1,106 @@
+ALTER PROCEDURE CreateOrder
+(@CartID char(36))
+AS
+/* Insert a new record into Orders */
+DECLARE @OrderID int
+INSERT INTO Orders DEFAULT VALUES
+/* Save the new Order ID */
+SET @OrderID = @@IDENTITY
+/* Add the order details to OrderDetail */
+INSERT INTO OrderDetail
+(OrderID, ProductID, ProductName, Quantity, UnitCost)
+SELECT
+@OrderID, product.pid, product.pname,
+ShoppingCart.Quantity, product.price
+FROM product JOIN ShoppingCart
+ON product.pid = ShoppingCart.ProductID
+WHERE ShoppingCart.CartID = @CartID
+/* Clear the shopping cart */
+DELETE FROM ShoppingCart
+WHERE CartID = @CartID
+/* Return the Order ID */
+SELECT @OrderID
+
+
+
+
+
+
+
+ALTER Procedure ShoppingCartAddItem
+(@CartID char(36),
+@ProductID int)
+AS
+IF EXISTS
+(SELECT CartID
+FROM ShoppingCart
+WHERE ProductID = @ProductID AND CartID = @CartID)
+UPDATE ShoppingCart
+SET Quantity = Quantity + 1
+WHERE ProductID = @ProductID AND CartID = @CartID
+ELSE
+IF EXISTS (SELECT pname FROM product WHERE pid=@ProductID)
+INSERT INTO ShoppingCart (CartID, ProductID, Quantity, DateAdded)
+VALUES (@CartID, @ProductID, 1, GETDATE())
+
+--------------
+
+
+ALTER PROCEDURE ShoppingCartGetItems
+(@CartID char(36))
+AS
+SELECT product.pid, product.pname, 
+product.price, ShoppingCart.Quantity,product.price * ShoppingCart.Quantity AS Subtotal
+FROM ShoppingCart INNER JOIN product
+ON ShoppingCart.ProductID = product.pid
+WHERE ShoppingCart.CartID = @CartID
+
+
+
+
+/*Subtotal is a computed column. It doesn’t exist in any of the tables you joined, but it’s generated
+using a formula, which in this case is the price of the product multiplied by its quantity. When sending back
+the results, Subtotal is regarded as a separate column.*/
+
+
+
+
+
+
+-------------
+ALTER PROCEDURE ShoppingCartGetTotalAmount
+(@CartID char(36))
+AS
+SELECT ISNULL(SUM(product.price * ShoppingCart.Quantity), 0)
+FROM ShoppingCart INNER JOIN product
+ON ShoppingCart.ProductID = product.pid
+WHERE ShoppingCart.CartID = @CartID
+
+/*ShoppingCartGetTotalAmount returns the total value of the products in the shopping cart. This
+is called when displaying the total amount for the shopping cart.*/
+
+/*The ISNULL method is used to return 0 instead of a NULL total amount (this happens if the shopping
+cart is empty). You must do this because the business tier expects to receive a numerical value as the amount.*/
+
+-------------
+ALTER PROCEDURE ShoppingCartRemoveItem
+(@CartID char(36),
+@ProductID int)
+AS
+DELETE FROM ShoppingCart
+WHERE CartID = @CartID and ProductID = @ProductID
+
+
+
+---------------
+ALTER Procedure ShoppingCartUpdateItem
+(@CartID char(36),
+@ProductID int,
+@Quantity int)
+AS
+IF @Quantity <= 0
+EXEC ShoppingCartRemoveItem @CartID, @ProductID
+ELSE
+UPDATE ShoppingCart
+SET Quantity = @Quantity, DateAdded = GETDATE()
+WHERE ProductID = @ProductID AND CartID = @CartID
